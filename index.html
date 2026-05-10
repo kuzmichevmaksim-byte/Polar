@@ -7,6 +7,7 @@
 
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <style>
     :root{
@@ -78,6 +79,10 @@
       background:#f3f4f6;
       color:#374151;
       border:1px solid var(--border);
+    }
+    button.excel{
+      background:#16a34a;
+      color:white;
     }
     .row{
       display:grid;
@@ -210,6 +215,7 @@
 
   <div class="panel">
     <input id="search" placeholder="Поиск по ФИО" oninput="render()">
+    <button class="excel" onclick="exportToExcel()">Выгрузить в Excel</button>
   </div>
 
   <div id="list"></div>
@@ -326,6 +332,49 @@ function saveEdit(id){
 
   db.collection("workers").doc(id).update({fio, start, days});
   editingId = null;
+}
+
+function exportToExcel(){
+  if(!workers.length){
+    return alert("Нет данных для выгрузки");
+  }
+
+  const query = (document.getElementById("search").value || "").toLowerCase();
+
+  const rows = workers
+    .map(w => ({...w, info: calc(w)}))
+    .filter(w => w.fio.toLowerCase().includes(query))
+    .sort((a,b) => a.fio.localeCompare(b.fio, "ru"))
+    .map((w, index) => ({
+      "№": index + 1,
+      "ФИО": w.fio,
+      "Дата начала": formatDate(w.start),
+      "Дней вахты": Number(w.days),
+      "Дата окончания": formatDate(w.info.end),
+      "Осталось дней": w.info.left < 0 ? 0 : w.info.left,
+      "Статус": w.info.label
+    }));
+
+  if(!rows.length){
+    return alert("По текущему поиску нет данных для выгрузки");
+  }
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  worksheet["!cols"] = [
+    {wch: 6},
+    {wch: 32},
+    {wch: 14},
+    {wch: 12},
+    {wch: 16},
+    {wch: 14},
+    {wch: 24}
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Вахты");
+
+  const fileName = "polar_vahty_" + dateKey(todayMidnight()) + ".xlsx";
+  XLSX.writeFile(workbook, fileName);
 }
 
 db.collection("workers").onSnapshot(snapshot => {
